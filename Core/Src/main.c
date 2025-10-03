@@ -124,31 +124,44 @@ int main(void)
 
 
   // 2. Define the set and reset masks for maximum clarity and speed
-   const uint32_t PIN_SET_MASK = GPIO_PIN_6;        // Bit 6 for Set (BS[6])
-   const uint32_t PIN_RESET_MASK = GPIO_PIN_6 << 16; // Bit (6+16)=22 for Reset (BR[6])
+  const uint32_t CLK_SET_MASK = GPIO_PIN_6;
+  const uint32_t CLK_RESET_MASK = GPIO_PIN_6 << 16;
+  const uint32_t MOSI_SET_MASK = GPIO_PIN_7;
+  const uint32_t MOSI_RESET_MASK = GPIO_PIN_7 << 16;
 
   /* USER CODE END BSP */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
+  uint32_t tx_buffer_counter = 0;
+  uint32_t rx_buffer[3000];
+  uint32_t tx_buffer[6001];
+  size_t tx_buffer_size = sizeof(tx_buffer) / sizeof(tx_buffer[0]);
+  size_t rx_buffer_size = sizeof(rx_buffer) / sizeof(rx_buffer[0]);
+
+  for (size_t i = 0; i < tx_buffer_size; i++) {
+      if (i % 2 == 0) {
+          tx_buffer[i] = CLK_RESET_MASK;
+      } else {
+          tx_buffer[i] = CLK_SET_MASK;
+      }
+  }
+
+  CLK_GPIO_Port->BSRR = tx_buffer[tx_buffer_counter++]; //set clock low and set MOSI
+
+
+  while (tx_buffer_counter < tx_buffer_size)
   {
-
-    /* -- Sample board code for User push-button in interrupt mode ---- */
-    if (BspButtonState == BUTTON_PRESSED)
-    {
-      /* Update button state */
-      BspButtonState = BUTTON_RELEASED;
-      /* -- Sample board code to toggle leds ---- */
-      BSP_LED_Toggle(LED_GREEN);
-      BSP_LED_Toggle(LED_BLUE);
-      BSP_LED_Toggle(LED_RED);
-
-      /* ..... Perform your action ..... */
-    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  // RISING EDGE
+	  CLK_GPIO_Port->BSRR = tx_buffer[tx_buffer_counter++];
+
+	  //FALLING EDGE
+	  CLK_GPIO_Port->BSRR = tx_buffer[tx_buffer_counter++];
+	  uint32_t full_port_state = MISO_GPIO_Port->IDR;
+
   }
   /* USER CODE END 3 */
 }
@@ -168,7 +181,7 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE3);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
@@ -181,13 +194,13 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLM = 4;
-  RCC_OscInitStruct.PLL.PLLN = 59;
-  RCC_OscInitStruct.PLL.PLLP = 2;
+  RCC_OscInitStruct.PLL.PLLN = 30;
+  RCC_OscInitStruct.PLL.PLLP = 4;
   RCC_OscInitStruct.PLL.PLLQ = 4;
   RCC_OscInitStruct.PLL.PLLR = 2;
   RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
-  RCC_OscInitStruct.PLL.PLLFRACN = 1024;
+  RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -200,13 +213,13 @@ void SystemClock_Config(void)
                               |RCC_CLOCKTYPE_D3PCLK1|RCC_CLOCKTYPE_D1PCLK1;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.SYSCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV4;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV4;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV4;
-  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV4;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB3CLKDivider = RCC_APB3_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_APB1_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV1;
+  RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -229,14 +242,20 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(CLK_GPIO_Port, CLK_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PC6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  /*Configure GPIO pin : CLK_Pin */
+  GPIO_InitStruct.Pin = CLK_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+  HAL_GPIO_Init(CLK_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : MISO_Pin */
+  GPIO_InitStruct.Pin = MISO_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(MISO_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
