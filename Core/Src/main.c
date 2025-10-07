@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,6 +46,21 @@ COM_InitTypeDef BspCOMInit;
 FDCAN_HandleTypeDef hfdcan1;
 
 /* USER CODE BEGIN PV */
+// CAN test variables
+uint32_t can_test_counter = 0;
+uint8_t can_test_data[8];
+FDCAN_TxHeaderTypeDef TxHeader;
+uint32_t TxMailbox;
+
+// Test message IDs
+#define CAN_TEST_ID_1    0x123
+#define CAN_TEST_ID_2    0x456
+#define CAN_TEST_ID_3    0x789
+
+// Test data patterns
+uint8_t test_pattern_1[8] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+uint8_t test_pattern_2[8] = {0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 0x55};
+uint8_t test_pattern_3[8] = {0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00};
 
 /* USER CODE END PV */
 
@@ -54,11 +69,82 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_FDCAN1_Init(void);
 /* USER CODE BEGIN PFP */
-
+HAL_StatusTypeDef CAN_SendTestMessage(uint32_t message_id, uint8_t* data, uint8_t data_length);
+void CAN_TestSequence(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+/**
+  * @brief  Send a CAN test message
+  * @param  message_id: CAN message ID
+  * @param  data: Pointer to data buffer
+  * @param  data_length: Length of data (1-8 bytes)
+  * @retval HAL status
+  */
+HAL_StatusTypeDef CAN_SendTestMessage(uint32_t message_id, uint8_t* data, uint8_t data_length)
+{
+  HAL_StatusTypeDef status;
+  
+  // Configure TxHeader
+  TxHeader.Identifier = message_id;
+  TxHeader.IdType = FDCAN_STANDARD_ID;
+  TxHeader.TxFrameType = FDCAN_DATA_FRAME;
+  TxHeader.DataLength = data_length << 16; // Data length in bits (multiply by 8)
+  TxHeader.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  TxHeader.BitRateSwitch = FDCAN_BRS_OFF;
+  TxHeader.FDFormat = FDCAN_CLASSIC_CAN;
+  TxHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
+  TxHeader.MessageMarker = 0;
+  
+  // Send the message
+  status = HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &TxHeader, data);
+  
+  return status;
+}
+
+/**
+  * @brief  Execute a sequence of CAN test messages
+  * @retval None
+  */
+void CAN_TestSequence(void)
+{
+  HAL_StatusTypeDef status;
+  
+  // Test message 1: Sequential data pattern
+  status = CAN_SendTestMessage(CAN_TEST_ID_1, test_pattern_1, 8);
+  if (status == HAL_OK) {
+    BSP_LED_On(LED_GREEN);
+    HAL_Delay(100);
+    BSP_LED_Off(LED_GREEN);
+  }
+  
+  HAL_Delay(500);
+  
+  // Test message 2: Alternating pattern
+  status = CAN_SendTestMessage(CAN_TEST_ID_2, test_pattern_2, 8);
+  if (status == HAL_OK) {
+    BSP_LED_On(LED_BLUE);
+    HAL_Delay(100);
+    BSP_LED_Off(LED_BLUE);
+  }
+  
+  HAL_Delay(500);
+  
+  // Test message 3: Counter-based data
+  for (int i = 0; i < 8; i++) {
+    can_test_data[i] = (uint8_t)(can_test_counter + i);
+  }
+  status = CAN_SendTestMessage(CAN_TEST_ID_3, can_test_data, 8);
+  if (status == HAL_OK) {
+    BSP_LED_On(LED_RED);
+    HAL_Delay(100);
+    BSP_LED_Off(LED_RED);
+  }
+  
+  can_test_counter++;
+}
 
 /* USER CODE END 0 */
 
@@ -93,6 +179,17 @@ int main(void)
   MX_GPIO_Init();
   MX_FDCAN1_Init();
   /* USER CODE BEGIN 2 */
+  
+  // Start FDCAN1
+  if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK) {
+    Error_Handler();
+  }
+  
+  // Print startup message
+  printf("CAN Test Application Started\r\n");
+  printf("FDCAN1 initialized and started\r\n");
+  printf("Press USER button to send test messages\r\n");
+  printf("Automatic test sequence every 3 seconds\r\n");
 
   /* USER CODE END 2 */
 
@@ -117,8 +214,32 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint32_t last_test_time = 0;
+  uint32_t current_time;
+  
   while (1)
   {
+    current_time = HAL_GetTick();
+    
+    // Automatic CAN test sequence every 3 seconds
+    if ((current_time - last_test_time) >= 3000) {
+      printf("Sending automatic CAN test sequence...\r\n");
+      CAN_TestSequence();
+      last_test_time = current_time;
+    }
+    
+    // Check for USER button press (manual trigger)
+    if (BSP_PB_GetState(BUTTON_USER) == GPIO_PIN_SET) {
+      HAL_Delay(50); // Simple debounce
+      if (BSP_PB_GetState(BUTTON_USER) == GPIO_PIN_SET) {
+        printf("USER button pressed - sending manual CAN test sequence...\r\n");
+        CAN_TestSequence();
+        // Wait for button release
+        while (BSP_PB_GetState(BUTTON_USER) == GPIO_PIN_SET) {
+          HAL_Delay(10);
+        }
+      }
+    }
 
     /* USER CODE END WHILE */
 
