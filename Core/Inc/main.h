@@ -60,10 +60,6 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define CLK_Pin GPIO_PIN_6
-#define CLK_GPIO_Port GPIOC
-#define MISO_Pin GPIO_PIN_7
-#define MISO_GPIO_Port GPIOC
 
 /* USER CODE BEGIN Private defines */
 
